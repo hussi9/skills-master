@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "skill=$(echo $CLAUDE_TOOL_INPUT | jq -r '.skill // empty'); if [[ -n \"$skill\" ]]; then echo \"$(date '+%Y-%m-%d %H:%M:%S')\t$skill\" >> ~/.claude/skill_usage.log; fi",
+            "command": "skill=$(echo $CLAUDE_TOOL_INPUT | jq -r '.skill // empty'); if [[ -n \"$skill\" ]]; then printf '%s\\t%s\\n' \"$(date '+%Y-%m-%d %H:%M:%S')\" \"$skill\" >> ~/.claude/skill_usage.log; fi",
             "async": true
           }
         ]

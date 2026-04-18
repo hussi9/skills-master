@@ -1,0 +1,10 @@
+# Generated test artifacts
+routing_test_real_results.json
+routing_test_results.json
+invocation_test_results.json
+
+# Internal working files
+.archive/
+
+# macOS
+.DS_Store

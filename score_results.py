@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Score routing test results against ground truth."""
-import json, sys
+import json
+import sys
+from pathlib import Path
 
 with open('/tmp/sm_test_response.txt') as f:
     raw = f.read().strip()
@@ -99,12 +101,12 @@ print(f"Model selection:             {model_ok}/{total} ({model_ok/total*100:.0f
 print(f"{'='*62}\n")
 
 # Save to JSON
-import json as j
-with open('/Users/airbook/devpro/skills-master/routing_test_real_results.json', 'w') as f:
-    j.dump({"summary": {"total": total, "passed": passed,
+results_path = Path(__file__).parent / "routing_test_real_results.json"
+with open(results_path, 'w') as f:
+    json.dump({"summary": {"total": total, "passed": passed,
                          "accuracy": round(passed/total*100,1),
                          "path_accuracy": round(path_ok/total*100,1),
                          "skill_accuracy": round(skill_ok/total*100,1),
                          "model_accuracy": round(model_ok/total*100,1)},
              "raw_response": raw}, f, indent=2)
-print("Results saved to routing_test_real_results.json")
+print(f"Results saved to {results_path}")

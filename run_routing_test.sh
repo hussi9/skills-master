@@ -30,6 +30,8 @@ Tasks:
 19. What is the difference between map and flatMap?
 20. Show me line 42 of auth.ts'
 
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
 echo "Running 20-case routing test through real Claude Code (claude-sonnet-4-6)..."
 echo ""
 
@@ -37,11 +39,11 @@ echo ""
 claude -p "$PROMPT" --output-format json > /tmp/sm_test_raw.json 2>/dev/null
 
 # Extract the result text from the JSON event stream
-python3 /Users/airbook/devpro/skills-master/extract_result.py > /tmp/sm_test_response.txt
+python3 "$DIR/extract_result.py" > /tmp/sm_test_response.txt
 
 echo "Claude response:"
 cat /tmp/sm_test_response.txt
 echo ""
 
 # Score it
-python3 /Users/airbook/devpro/skills-master/score_results.py
+python3 "$DIR/score_results.py"
