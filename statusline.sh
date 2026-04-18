@@ -51,12 +51,16 @@ removed     = int(c.get("total_lines_removed", 0) or 0)
 turns       = int(c.get("turn_count", 0) or d.get("session", {}).get("turn_count", 0) or 0)
 cache_tok   = int(c.get("cache_read_tokens", 0) or 0)
 
-print(f"{model_raw}|{cwd}|{ctx_pct}|{cost_usd:.4f}|{duration_ms}|{added}|{removed}|{turns}|{ctx_used}|{ctx_total}|{cache_tok}")
+cost_tier = 0
+if cost_usd >= 2.0: cost_tier = 3
+elif cost_usd >= 1.0: cost_tier = 2
+elif cost_usd >= 0.5: cost_tier = 1
+print(f"{model_raw}|{cwd}|{ctx_pct}|{cost_usd:.4f}|{duration_ms}|{added}|{removed}|{turns}|{ctx_used}|{ctx_total}|{cache_tok}|{cost_tier}")
 '
 
 raw=$(python3 -c "$parse_py" "$input" 2>/dev/null)
 IFS='|' read -r model_raw cwd_raw ctx_pct cost_raw duration_ms \
-               lines_added lines_removed turns_raw ctx_used ctx_total cache_tokens <<< "$raw"
+               lines_added lines_removed turns_raw ctx_used ctx_total cache_tokens cost_tier <<< "$raw"
 
 # ── Shorten model name ─────────────────────────────────────────────────────────
 case "$model_raw" in
@@ -101,11 +105,8 @@ duration=$(printf "%d:%02d" "$mins" "$secs")
 
 # ── Cost formatting ────────────────────────────────────────────────────────────
 cost_num="${cost_raw:-0}"
-cost_display=$(python3 -c "print(f'\${float(\"$cost_num\"):.2f}')" 2>/dev/null || echo '$0.00')
-cost_tier=0
-[ "$(python3 -c "print(1 if float('${cost_num}') >= 0.5 else 0)" 2>/dev/null)" = "1" ] && cost_tier=1
-[ "$(python3 -c "print(1 if float('${cost_num}') >= 1.0 else 0)" 2>/dev/null)" = "1" ] && cost_tier=2
-[ "$(python3 -c "print(1 if float('${cost_num}') >= 2.0 else 0)" 2>/dev/null)" = "1" ] && cost_tier=3
+cost_display=$(printf '$%.2f' "$cost_num" 2>/dev/null || echo '$0.00')
+cost_tier="${cost_tier:-0}"
 
 # ── Mood indicator ────────────────────────────────────────────────────────────
 mood="◆"

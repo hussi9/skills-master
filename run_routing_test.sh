@@ -36,7 +36,7 @@ echo "Running 20-case routing test through real Claude Code (claude-sonnet-4-6).
 echo ""
 
 # Run claude -p and save full JSON output
-claude -p "$PROMPT" --output-format json > /tmp/sm_test_raw.json 2>/dev/null
+claude -p "$PROMPT" --model claude-sonnet-4-6 --output-format json > /tmp/sm_test_raw.json 2>/dev/null
 
 # Extract the result text from the JSON event stream
 python3 "$DIR/extract_result.py" > /tmp/sm_test_response.txt

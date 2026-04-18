@@ -34,7 +34,9 @@ Tested via `claude -p` CLI on 20 real-world task prompts:
 | Model selection | 19/20 (95%) |
 | Skill tool actually fires correctly | 7/8 **(88%)** |
 
-The 2 misses share one root cause: auth-adjacent task wording incorrectly triggering the "auth → opus" escalation rule. Fixable with a tighter signal.
+The 2 routing misses share one root cause: auth-adjacent task wording incorrectly triggering the "auth → opus" escalation rule. Fixable with a tighter signal.
+
+> The top four rows come from `run_routing_test.sh` (20 prompts through `claude -p`). The invocation row (7/8) is from a separate live-session test verifying the `Skill` tool actually fires, not just that the routing triple is correct.
 
 Test harness is in the repo — run `bash run_routing_test.sh` against your own setup.
 
@@ -117,7 +119,7 @@ chmod +x ~/.claude/statusline.sh
         "hooks": [
           {
             "type": "command",
-            "command": "skill=$(echo $CLAUDE_TOOL_INPUT | jq -r '.skill // empty'); if [[ -n \"$skill\" ]]; then printf '%s\\t%s\\n' \"$(date '+%Y-%m-%d %H:%M:%S')\" \"$skill\" >> ~/.claude/skill_usage.log; fi",
+            "command": "skill=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.skill // empty'); if [[ -n \"$skill\" ]]; then printf '%s\\t%s\\n' \"$(date '+%Y-%m-%d %H:%M:%S')\" \"$skill\" >> ~/.claude/skill_usage.log; fi",
             "async": true
           }
         ]
@@ -211,7 +213,7 @@ New skills are published to GitHub daily. skills-master keeps you current withou
 - skills-master uses `kubernetes-expert` instead
 - You get specialist-level guidance without knowing the skill existed
 
-This is why 48 people installed skills-master in the first week without a star prompt.
+The catalog check is the reason people install this once and keep it — new skills become available without any manual tracking.
 
 ---
 
