@@ -1,29 +1,25 @@
 #!/usr/bin/env bash
-# Claude Code statusline — model · dir · git · active skill · context · cost · time · lines
+# Claude Code statusline — model · dir · git · ROUTER · skill · context · cost · time · lines
+#
+# Shows skill-router activity inline:
+#   🔀 R5  …………………… session count of router fires
+#   ▶ ship-feature 2/4 …. live chain progress (when a chain is mid-flight)
+#   ⚙ frontend-design ✓.. last skill, ✓ if it came via a catalog upgrade
+#   ✦ saved …………………… badge when a saved-chain match won
 #
 # INSTALL:
 #   cp statusline.sh ~/.claude/statusline.sh
 #   chmod +x ~/.claude/statusline.sh
-#
-# Then add to ~/.claude/settings.json:
-#   "statusLine": {
-#     "type": "command",
-#     "command": "~/.claude/statusline.sh",
-#     "padding": 2
-#   }
-#
-# SKILL TRACKING (optional — shows active skill in statusline):
-#   Add the hook from settings-hooks.json to your settings.json PostToolUse section.
-#   Skills are logged to ~/.claude/skill_usage.log and shown for 120s after firing.
+#   then merge settings-hooks.json into ~/.claude/settings.json
 
 input=$(cat)
 
-# ── Parse all fields via one Python call ──────────────────────────────────────
+# ── Parse session JSON via one Python call ────────────────────────────────────
 parse_py='
 import sys, json, os
 try:
     d = json.loads(sys.argv[1])
-except:
+except Exception:
     d = {}
 home = os.path.expanduser("~")
 
@@ -62,7 +58,7 @@ raw=$(python3 -c "$parse_py" "$input" 2>/dev/null)
 IFS='|' read -r model_raw cwd_raw ctx_pct cost_raw duration_ms \
                lines_added lines_removed turns_raw ctx_used ctx_total cache_tokens cost_tier <<< "$raw"
 
-# ── Shorten model name ─────────────────────────────────────────────────────────
+# ── Shorten model name ────────────────────────────────────────────────────────
 case "$model_raw" in
   *opus*)   model_short="opus"   ;;
   *sonnet*) model_short="sonnet" ;;
@@ -70,7 +66,7 @@ case "$model_raw" in
   *)        model_short="${model_raw##*-}" ;;
 esac
 
-# ── Git info ───────────────────────────────────────────────────────────────────
+# ── Git info ──────────────────────────────────────────────────────────────────
 git_str=""
 real_cwd="${cwd_raw/#\~/$HOME}"
 if git -C "$real_cwd" rev-parse --git-dir &>/dev/null 2>&1; then
@@ -90,7 +86,7 @@ if git -C "$real_cwd" rev-parse --git-dir &>/dev/null 2>&1; then
   git_str="⎇ ${branch}${dirty_mark}${ab:+ $ab}"
 fi
 
-# ── Context mini-bar (10 blocks) ───────────────────────────────────────────────
+# ── Context mini-bar (10 blocks) ──────────────────────────────────────────────
 ctx_int=${ctx_pct%.*}; ctx_int=${ctx_int:-0}
 filled=$(( ctx_int / 10 ))
 empty=$(( 10 - filled ))
@@ -103,7 +99,7 @@ mins=$(( ${duration_ms:-0} / 60000 ))
 secs=$(( (${duration_ms:-0} % 60000) / 1000 ))
 duration=$(printf "%d:%02d" "$mins" "$secs")
 
-# ── Cost formatting ────────────────────────────────────────────────────────────
+# ── Cost formatting ───────────────────────────────────────────────────────────
 cost_num="${cost_raw:-0}"
 cost_display=$(printf '$%.2f' "$cost_num" 2>/dev/null || echo '$0.00')
 cost_tier="${cost_tier:-0}"
@@ -122,6 +118,7 @@ BCYAN='\033[1;36m'
 BYELLOW='\033[1;33m'
 BGREEN='\033[1;32m'
 BRED='\033[1;31m'
+BMAGENTA='\033[1;35m'
 GREEN='\033[32m'
 YELLOW='\033[33m'
 RED='\033[31m'
@@ -144,35 +141,129 @@ case ${cost_tier:-0} in
   *) cost_color=$BRED ;;
 esac
 
-# ── Last skill used (from log, within last 120s) ──────────────────────────────
-# Requires the PostToolUse hook from settings-hooks.json to be active.
-# Log format: "2026-04-17 14:23:01\tskill-name"
-skill_str=""
-log_file="$HOME/.claude/skill_usage.log"
-if [ -f "$log_file" ]; then
-  last_line=$(tail -1 "$log_file" 2>/dev/null)
-  if [ -n "$last_line" ]; then
-    last_ts=$(echo "$last_line" | awk '{print $1, $2}')
-    last_skill=$(echo "$last_line" | awk '{print $3}')
-    now_epoch=$(date +%s)
-    last_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "$last_ts" +%s 2>/dev/null \
-              || date -d "$last_ts" +%s 2>/dev/null \
-              || echo 0)
-    age=$(( now_epoch - last_epoch ))
-    if [ "$age" -le 120 ] && [ -n "$last_skill" ]; then
-      short_skill="${last_skill##*:}"  # strip plugin prefix
-      skill_str="⚙ ${short_skill}"
-    fi
-  fi
+# ── Skill-router awareness (pulls 3 signals from logs) ────────────────────────
+# Computed via one Python call so we don't fork many awk/date subprocesses:
+#   1) router_active   — true if skill-router fired in last 30s
+#   2) router_count    — how many times skill-router fired this session
+#   3) chain_progress  — "name N/M" if a chain is mid-flight (last 5 min)
+#   4) saved_match     — "name" if the active chain was a saved match
+#   5) catalog_upgrade — true if last skill came via a catalog upgrade
+#   6) last_skill      — short name of last skill fired (within 120s)
+
+router_py='
+import os, json, sys, time
+home = os.path.expanduser("~")
+session_dur_ms = int(sys.argv[1] or 0)
+now = time.time()
+session_start = now - (session_dur_ms / 1000.0)
+
+router_active = "0"
+router_count = "0"
+chain_progress = ""
+saved_match = ""
+catalog_upgrade = "0"
+last_skill = ""
+
+# 1) skill_usage.log: timestamp\tskill[\textra]
+log = os.path.join(home, ".claude", "skill_usage.log")
+if os.path.isfile(log):
+    try:
+        with open(log) as f:
+            lines = f.readlines()[-200:]
+        rcount = 0
+        last_router_age = 99999
+        last_skill_name = ""
+        last_extra = ""
+        for line in lines:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) < 2: continue
+            ts, skill = parts[0], parts[1]
+            extra = parts[2] if len(parts) > 2 else ""
+            try:
+                t = time.mktime(time.strptime(ts, "%Y-%m-%d %H:%M:%S"))
+            except Exception:
+                continue
+            if t < session_start: continue
+            if skill == "skill-router":
+                rcount += 1
+                last_router_age = now - t
+            else:
+                last_skill_name = skill.split(":")[-1]
+                last_extra = extra
+        router_count = str(rcount)
+        if last_router_age <= 30: router_active = "1"
+        if (now - t) <= 120 and last_skill_name:
+            last_skill = last_skill_name
+            if "catalog-upgrade" in last_extra: catalog_upgrade = "1"
+    except Exception:
+        pass
+
+# 2) skill_router_log.jsonl — last chain-start / chain-step within 5 min
+chainlog = os.path.join(home, ".claude", "skill_router_log.jsonl")
+if os.path.isfile(chainlog):
+    try:
+        with open(chainlog) as f:
+            entries = f.readlines()[-50:]
+        active = None
+        for line in entries:
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            try:
+                t = time.mktime(time.strptime(e.get("ts",""), "%Y-%m-%dT%H:%M:%S"))
+            except Exception:
+                continue
+            if (now - t) > 300: continue
+            if e.get("type") == "chain-start":
+                active = {"name": e.get("name",""), "of": len(e.get("steps",[])), "step": 0,
+                          "saved": "saved" in e.get("name",""), "raw_name": e.get("name","")}
+            elif e.get("type") == "chain-step" and active is not None:
+                active["step"] = e.get("step", active["step"])
+            elif e.get("type") == "chain-end":
+                active = None
+        if active and active["of"] > 0:
+            chain_progress = f"{active[\"raw_name\"][:18]} {active[\"step\"]}/{active[\"of\"]}"
+            if active["saved"]: saved_match = active["raw_name"]
+    except Exception:
+        pass
+
+print(f"{router_active}|{router_count}|{chain_progress}|{saved_match}|{catalog_upgrade}|{last_skill}")
+'
+
+router_raw=$(python3 -c "$router_py" "${duration_ms:-0}" 2>/dev/null)
+IFS='|' read -r router_active router_count chain_progress saved_match catalog_upgrade last_skill <<< "$router_raw"
+
+# ── Build router segment ──────────────────────────────────────────────────────
+router_seg=""
+if [ "${router_active:-0}" = "1" ]; then
+  router_seg="${BMAGENTA}🔀${R} ${BOLD}router${R}"
+elif [ "${router_count:-0}" -gt 0 ]; then
+  router_seg="${DIM}🔀 R${router_count}${R}"
+fi
+
+chain_seg=""
+if [ -n "$chain_progress" ]; then
+  chain_seg="${BMAGENTA}▶${R} ${BOLD}${chain_progress}${R}"
+fi
+
+# ── Last-skill segment with provenance markers ────────────────────────────────
+skill_seg=""
+if [ -n "$last_skill" ]; then
+  marker=""
+  [ "${catalog_upgrade:-0}" = "1" ] && marker=" ${BGREEN}✓${R}"
+  skill_seg="${BOLD}${CYAN}⚙ ${last_skill}${R}${marker}"
 fi
 
 # ── Build output ──────────────────────────────────────────────────────────────
 S="${DIM} · ${R}"
 
 out="${DIM}${mood}${R} ${BCYAN}${model_short}${R}"
-[ -n "$cwd_raw" ]   && out+="${S}${BLUE}${cwd_raw}${R}"
-[ -n "$git_str" ]   && out+="${S}${MAGENTA}${git_str}${R}"
-[ -n "$skill_str" ] && out+="${S}${BOLD}${CYAN}${skill_str}${R}"
+[ -n "$cwd_raw" ]    && out+="${S}${BLUE}${cwd_raw}${R}"
+[ -n "$git_str" ]    && out+="${S}${MAGENTA}${git_str}${R}"
+[ -n "$router_seg" ] && out+="${S}${router_seg}"
+[ -n "$chain_seg" ]  && out+="${S}${chain_seg}"
+[ -n "$skill_seg" ]  && out+="${S}${skill_seg}"
 out+="${S}${ctx_color}${bar} ${ctx_pct}%${R}"
 [ "${turns_raw:-0}" -gt 0 ] && out+="${S}${DIM}${turns_raw}t${R}"
 out+="${S}${cost_color}${cost_display}${R}"

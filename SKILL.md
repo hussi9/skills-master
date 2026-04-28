@@ -198,6 +198,69 @@ Edit `SKILL.personal.md` with your project signals. Your rules win over the core
 
 ---
 
+## DISPATCH PROTOCOL — How to Actually Run a Chain
+
+This is what makes the **Model** column enforced and not advisory.
+
+**Rule: every chain step that needs a model different from the parent session
+runs as a subagent via the `Agent` tool**, with `model` and `subagent_type`
+set explicitly from the routing triple.
+
+```
+For each step in the announced chain:
+
+  IF step.model == parent_session_model AND step is not parallel-fan-out:
+      → invoke Skill(<skill>) in-session  (cheaper, same context)
+
+  ELSE:
+      → Agent(
+          subagent_type=<agent from triple>,
+          model=<model from triple>,
+          description="<step skill name>",
+          prompt="""
+            Use Skill: <skill from triple>
+            Task: <relevant slice of the user's request>
+            Context: <files / decisions the step needs>
+          """
+        )
+
+  Wait for the step to return before launching the next sequential step.
+  Parallel steps (operator `+`) launch together via a single message with
+  multiple Agent tool calls.
+```
+
+**Why this matters:**
+
+- The parent session can't hot-swap models mid-turn. The only way to enforce
+  a different model on a step is to run that step in a subagent with `model`
+  set on the `Agent` call.
+- Subagents cost tokens for context-passing, but you save dramatically when
+  a `haiku`-tier step would otherwise run on `opus`. For a 5-step chain with
+  mixed complexity, this typically nets a 30-50% cost reduction.
+- The parent session does light orchestration only. Heavy work happens at the
+  right model.
+
+**Logging the dispatch (for observability + statusline):**
+
+After announcing the chain, append one JSON line to
+`~/.claude/skill_router_log.jsonl` so the statusline can show progress:
+
+```bash
+echo '{"ts":"<ISO8601>","type":"chain-start","name":"<chain-name-or-computed>","steps":["step1","step2","step3"],"models":["sonnet","sonnet","opus"]}' \
+  >> ~/.claude/skill_router_log.jsonl
+```
+
+After each step completes, append:
+```bash
+echo '{"ts":"<ISO8601>","type":"chain-step","name":"<chain-name>","step":2,"of":3,"skill":"<skill>","model":"<model>"}' \
+  >> ~/.claude/skill_router_log.jsonl
+```
+
+The statusline reads this file to surface live chain progress — see
+[`statusline.sh`](./statusline.sh).
+
+---
+
 ## RED FLAGS — Signs You're About to Skip This
 
 ```

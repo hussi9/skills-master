@@ -55,6 +55,17 @@ Each path has a table mapping signals to a `Skill + Agent + Model` triple:
 
 Model selection is *part of routing*, not a separate decision. `haiku` for trivial reads, `opus` for production incidents, `sonnet` for everything else.
 
+### How model selection is actually enforced
+
+The parent Claude Code session can't hot-swap models mid-turn — there's no API for "now run this turn at sonnet." So the router uses a simple rule:
+
+- **Step's model matches parent session model** → invoke the Skill in-session (cheaper, same context).
+- **Step's model differs from parent** → dispatch via the `Agent` tool with `subagent_type` and `model` set explicitly. The subagent runs at the right model independent of the parent.
+
+For a multi-domain chain, every step that needs a non-parent model goes through `Agent`. The parent does light orchestration only; the heavy work happens at the right model. This typically nets a 30-50% cost reduction on chains with mixed complexity (e.g. `haiku` reads + `sonnet` writes + `opus` review).
+
+Full protocol: [`SKILL.md`](../SKILL.md) "DISPATCH PROTOCOL" section.
+
 ## 4. Catalog check
 
 If the table returns a generic skill (e.g. `integration-specialist`), the router searches local + remote catalogs for a more specific match. If you have `stripe-automation` installed, it wins over the generic.
@@ -86,6 +97,23 @@ Chain: writing-plans → dispatching-parallel-agents → frontend-design + db-ex
 Operators in chains: `→` sequential (B depends on A), `+` parallel (no shared state).
 
 The announcement fires *before* any tool call. You can grep your transcript and verify what fired matches what was announced. That's the whole testability story.
+
+## Statusline integration
+
+If you install [`statusline.sh`](../statusline.sh) plus the hook in [`settings-hooks.json`](../settings-hooks.json), the Claude Code status bar surfaces router activity in real time:
+
+```
+◆ sonnet · ~/myproject · ⎇ main · 🔀 router · ▶ ship-feature 2/4 · ⚙ frontend-design ✓ · ▓▓░░░░ 18% · $0.04
+```
+
+| Segment | Meaning |
+|---|---|
+| `🔀 router` | skill-router fired in the last 30s (currently routing) |
+| `🔀 R5` | skill-router has fired 5 times in this session |
+| `▶ ship-feature 2/4` | a chain is mid-flight, on step 2 of 4 |
+| `⚙ frontend-design ✓` | last skill that fired; `✓` = upgraded via catalog check |
+
+Source data: `~/.claude/skill_usage.log` (per-skill firings) + `~/.claude/skill_router_log.jsonl` (chain announcements + step progress, written by SKILL.md's dispatch protocol).
 
 ## Five design principles
 
