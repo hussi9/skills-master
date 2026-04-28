@@ -263,7 +263,9 @@ fi
 
 chain_seg=""
 if [ -n "$chain_progress" ]; then
-  chain_seg="${BMAGENTA}▶${R} ${BOLD}${chain_progress}${R}"
+  saved_marker=""
+  [ -n "$saved_match" ] && saved_marker=" ${BGREEN}✦saved${R}"
+  chain_seg="${BMAGENTA}▶${R} ${BOLD}${chain_progress}${R}${saved_marker}"
 fi
 
 # ── Thinking-depth segment ────────────────────────────────────────────────────

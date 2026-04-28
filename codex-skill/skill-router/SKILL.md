@@ -22,12 +22,17 @@ Use this skill to make Codex routing environment-aware instead of guess-based.
 
 ## Lane Selection
 
-- `direct`: trivial read, one command, one factual answer, or obviously reversible work with no special capability needed
-- `broken`: bug, failure, regression, wrong output, crash, failing tests, broken build
-- `build`: new feature, component, integration, file, artifact, or workflow addition
-- `operate`: refactor, automate, configure, document, deploy, optimize, maintain
-- `review`: code review, risk review, architecture review, security review
-- `plan`: broad, ambiguous, or multi-stage work where the execution path is not yet solid
+| Lane | Examples | Default Reasoning | Default Thinking |
+|------|----------|-------------------|------------------|
+| `direct` | trivial read, one command, factual answer | fast | none |
+| `broken` | bug, regression, crash, failing test, broken build | standard | think |
+| `build` | new feature, component, integration, workflow | standard | think |
+| `operate` | refactor, automate, configure, document, deploy | standard | none |
+| `review` | code review, risk review, security review | standard | think-hard |
+| `plan` | broad, ambiguous, multi-stage, scope decisions | frontier | **ultrathink** |
+
+Escalate to `frontier` reasoning + `ultrathink` for: production incidents,
+auth/permissions changes, architecture decisions where rollback is expensive.
 
 If a task spans multiple lanes, choose the first critical lane and note the downstream chain.
 

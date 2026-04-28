@@ -5,6 +5,10 @@ All notable changes to skill-router. Newest first.
 ## Unreleased
 
 ### Added
+- **CONTRIBUTING.md** with file-map, what-we-want / what-we-don't-want, PR checklist
+- **GitHub Actions lint workflow** (`.github/workflows/lint.yml`) — validates SKILL.md frontmatter, statusline runs cleanly, no planning docs at root, known-skill-repos has canonical entries, CHANGELOG has Unreleased section, Claude + Codex flavors have parity on core sections
+- **Codex flavor lane table** now includes default Reasoning + Thinking columns matching Claude flavor
+- **Statusline `✦saved` badge** when an active chain came from a saved-chain match
 - **Thinking-depth column** in routing tables: `none / think / think-hard / ultrathink`. Router pre-pends the keyword to dispatch prompts for steps that need extended thinking.
 - **`references/thinking-depth.md`** — full rules + community-skill alternatives (intellectronica/agent-skills `ultrathink`, etc).
 - **`intellectronica/agent-skills`** + **`wasabeef/claude-code-cookbook`** added to `references/known-skill-repos.md` so catalog check can find their `ultrathink` and `think-hard` skills.
