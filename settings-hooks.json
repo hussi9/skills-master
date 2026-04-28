@@ -1,4 +1,7 @@
 {
+  "_comment": "skill-router hooks. Two log files are involved:",
+  "_log_skill_usage": "~/.claude/skill_usage.log — written by the hook below, one line per Skill tool fire (timestamp\\tskill-name)",
+  "_log_skill_router": "~/.claude/skill_router_log.jsonl — chain-start, chain-step, thinking-active, catalog-upgrade events. Written by SKILL.md's DISPATCH PROTOCOL section, NOT by this hook.",
   "hooks": {
     "PostToolUse": [
       {

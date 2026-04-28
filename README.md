@@ -24,6 +24,15 @@ curl -sL https://raw.githubusercontent.com/hussi9/skill-router/main/SKILL.md \
 
 That's it. Claude Code auto-loads it on session start. You never invoke it manually.
 
+**Verify it's working:** start a Claude Code session, type `lets add a settings page that writes to the database`. Before any tool fires, you should see something like:
+
+```
+This touches 2 domains: UI/Frontend, DB schema.
+Chain: writing-plans → frontend-design + db-expert
+```
+
+If you see that announcement, the router is loaded. If Claude jumps straight into reading files, the skill didn't load — check the path under `~/.claude/skills/skill-router/SKILL.md` exists and `name: skill-router` is in the frontmatter.
+
 ## Measured
 
 20 real prompts through `claude -p` (test harness in [`run_routing_test.sh`](./run_routing_test.sh)):

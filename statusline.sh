@@ -163,8 +163,9 @@ chain_progress = ""
 saved_match = ""
 catalog_upgrade = "0"
 last_skill = ""
+thinking_level = ""    # "ultra", "hard", "think", or empty
 
-# 1) skill_usage.log: timestamp\tskill[\textra]
+# 1) skill_usage.log: timestamp\tskill (no extra field — provenance comes from skill_router_log.jsonl)
 log = os.path.join(home, ".claude", "skill_usage.log")
 if os.path.isfile(log):
     try:
@@ -173,12 +174,11 @@ if os.path.isfile(log):
         rcount = 0
         last_router_age = 99999
         last_skill_name = ""
-        last_extra = ""
+        last_t = 0
         for line in lines:
             parts = line.rstrip("\n").split("\t")
             if len(parts) < 2: continue
             ts, skill = parts[0], parts[1]
-            extra = parts[2] if len(parts) > 2 else ""
             try:
                 t = time.mktime(time.strptime(ts, "%Y-%m-%d %H:%M:%S"))
             except Exception:
@@ -189,22 +189,23 @@ if os.path.isfile(log):
                 last_router_age = now - t
             else:
                 last_skill_name = skill.split(":")[-1]
-                last_extra = extra
+                last_t = t
         router_count = str(rcount)
         if last_router_age <= 30: router_active = "1"
-        if (now - t) <= 120 and last_skill_name:
+        if last_t and (now - last_t) <= 120 and last_skill_name:
             last_skill = last_skill_name
-            if "catalog-upgrade" in last_extra: catalog_upgrade = "1"
     except Exception:
         pass
 
-# 2) skill_router_log.jsonl — last chain-start / chain-step within 5 min
+# 2) skill_router_log.jsonl — chain progress + thinking + catalog-upgrade
 chainlog = os.path.join(home, ".claude", "skill_router_log.jsonl")
 if os.path.isfile(chainlog):
     try:
         with open(chainlog) as f:
             entries = f.readlines()[-50:]
         active = None
+        last_thinking_active = None
+        last_upgrade_age = 99999
         for line in entries:
             try:
                 e = json.loads(line)
@@ -215,24 +216,42 @@ if os.path.isfile(chainlog):
             except Exception:
                 continue
             if (now - t) > 300: continue
-            if e.get("type") == "chain-start":
+            etype = e.get("type")
+            if etype == "chain-start":
                 active = {"name": e.get("name",""), "of": len(e.get("steps",[])), "step": 0,
-                          "saved": "saved" in e.get("name",""), "raw_name": e.get("name","")}
-            elif e.get("type") == "chain-step" and active is not None:
+                          "saved": e.get("saved", False)}
+            elif etype == "chain-step" and active is not None:
                 active["step"] = e.get("step", active["step"])
-            elif e.get("type") == "chain-end":
+                if e.get("via") == "catalog-upgrade":
+                    last_upgrade_age = now - t
+            elif etype == "chain-end":
                 active = None
+            elif etype == "thinking-active":
+                # event has {"level": "ultra"|"hard"|"think", "active": true|false}
+                if e.get("active"):
+                    last_thinking_active = {"level": e.get("level",""), "t": t}
+                else:
+                    last_thinking_active = None
+            elif etype == "catalog-upgrade":
+                last_upgrade_age = now - t
         if active and active["of"] > 0:
-            chain_progress = f"{active[\"raw_name\"][:18]} {active[\"step\"]}/{active[\"of\"]}"
-            if active["saved"]: saved_match = active["raw_name"]
+            name_short = active["name"][:18]
+            step_n = active["step"]
+            of_n = active["of"]
+            chain_progress = f"{name_short} {step_n}/{of_n}"
+            if active.get("saved"): saved_match = active["name"]
+        if last_thinking_active and (now - last_thinking_active["t"]) <= 60:
+            thinking_level = last_thinking_active["level"]
+        if last_upgrade_age <= 120:
+            catalog_upgrade = "1"
     except Exception:
         pass
 
-print(f"{router_active}|{router_count}|{chain_progress}|{saved_match}|{catalog_upgrade}|{last_skill}")
+print(f"{router_active}|{router_count}|{chain_progress}|{saved_match}|{catalog_upgrade}|{last_skill}|{thinking_level}")
 '
 
 router_raw=$(python3 -c "$router_py" "${duration_ms:-0}" 2>/dev/null)
-IFS='|' read -r router_active router_count chain_progress saved_match catalog_upgrade last_skill <<< "$router_raw"
+IFS='|' read -r router_active router_count chain_progress saved_match catalog_upgrade last_skill thinking_level <<< "$router_raw"
 
 # ── Build router segment ──────────────────────────────────────────────────────
 router_seg=""
@@ -246,6 +265,14 @@ chain_seg=""
 if [ -n "$chain_progress" ]; then
   chain_seg="${BMAGENTA}▶${R} ${BOLD}${chain_progress}${R}"
 fi
+
+# ── Thinking-depth segment ────────────────────────────────────────────────────
+thinking_seg=""
+case "$thinking_level" in
+  ultra) thinking_seg="${BRED}🧠 ultra${R}" ;;
+  hard)  thinking_seg="${ORANGE}🧠 hard${R}" ;;
+  think) thinking_seg="${YELLOW}🧠 think${R}" ;;
+esac
 
 # ── Last-skill segment with provenance markers ────────────────────────────────
 skill_seg=""
@@ -261,9 +288,10 @@ S="${DIM} · ${R}"
 out="${DIM}${mood}${R} ${BCYAN}${model_short}${R}"
 [ -n "$cwd_raw" ]    && out+="${S}${BLUE}${cwd_raw}${R}"
 [ -n "$git_str" ]    && out+="${S}${MAGENTA}${git_str}${R}"
-[ -n "$router_seg" ] && out+="${S}${router_seg}"
-[ -n "$chain_seg" ]  && out+="${S}${chain_seg}"
-[ -n "$skill_seg" ]  && out+="${S}${skill_seg}"
+[ -n "$router_seg" ]   && out+="${S}${router_seg}"
+[ -n "$chain_seg" ]    && out+="${S}${chain_seg}"
+[ -n "$thinking_seg" ] && out+="${S}${thinking_seg}"
+[ -n "$skill_seg" ]    && out+="${S}${skill_seg}"
 out+="${S}${ctx_color}${bar} ${ctx_pct}%${R}"
 [ "${turns_raw:-0}" -gt 0 ] && out+="${S}${DIM}${turns_raw}t${R}"
 out+="${S}${cost_color}${cost_display}${R}"

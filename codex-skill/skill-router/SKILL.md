@@ -77,6 +77,47 @@ Always return:
 
 See `references/routing-contract.md` for the canonical shape.
 
+## Named Chains (Optional)
+
+If `AGENTS.md` declares saved chain sequences, check them BEFORE computing
+fresh from the lane tables. Match by substring on the user's prompt; first
+match wins.
+
+```yaml
+# in AGENTS.md
+chains:
+  - name: ship-feature
+    when: ["ship the feature", "lets implement"]
+    chain: writing-plans → frontend + db
+    thinking: think
+```
+
+Per-step models / agents resolve from the lane tables unless `chain.model`
+or `chain.thinking` overrides globally, or `steps[].model` overrides per
+step.
+
+## Dispatch Protocol — Per-Step Model Enforcement
+
+When a chain step needs a different model than the parent session, dispatch
+that step as a Codex sub-task with `model:` set explicitly. Steps that
+match the parent model run inline.
+
+```
+For each step in the chain:
+  IF step.model == parent_model AND not parallel-fan-out:
+      → run inline
+  ELSE:
+      → spawn sub-task with model=<step.model>, agent=<step.agent>
+  Parallel steps (`+`) launch concurrently.
+```
+
+## Thinking Depth
+
+Each lane row carries an optional `Thinking` value: `none / think /
+think-hard / ultrathink`. Pre-pend the keyword to the dispatch prompt to
+allocate extended-thinking budget. Production incidents and architecture
+decisions default to `ultrathink`; mechanical work to `none`.
+
 ## Codex-Specific Notes
 
 - this skill is local-first

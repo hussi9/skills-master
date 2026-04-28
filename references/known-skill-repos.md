@@ -19,6 +19,8 @@ phase (see [`catalog-check.md`](./catalog-check.md)).
 | `K-Dense-AI/claude-scientific-skills` | `/scientific-skills/` | `https://api.github.com/repos/K-Dense-AI/claude-scientific-skills/contents/scientific-skills` | 139 scientific skills |
 | `ComposioHQ/awesome-claude-skills` | `/` | `https://api.github.com/repos/ComposioHQ/awesome-claude-skills/contents` | Curated awesome list |
 | `sickn33/antigravity-awesome-skills` | `/skills/` | `https://api.github.com/repos/sickn33/antigravity-awesome-skills/contents/skills` | Frontend, design, copy, SEO |
+| `intellectronica/agent-skills` | `/skills/` | `https://api.github.com/repos/intellectronica/agent-skills/contents/skills` | Includes `ultrathink`, deep-thinking patterns |
+| `wasabeef/claude-code-cookbook` | `/plugins/*/skills/` | `https://api.github.com/repos/wasabeef/claude-code-cookbook/contents/plugins` | Cookbook + ultrathink |
 
 ## Search order (enforced by [`catalog-check.md`](./catalog-check.md))
 
