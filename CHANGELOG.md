@@ -5,6 +5,14 @@ All notable changes to skill-router. Newest first.
 ## Unreleased
 
 ### Added
+- **`scripts/learn-chains.py`** — addresses the "named-chain-as-corpus" gap. Reads `~/.claude/skill_router_log.jsonl`, finds chains the router has re-derived 3+ times, proposes named-chain entries you can paste (or `--apply`) into `SKILL.personal.md`. The first concrete step toward learned routing.
+- **`scripts/audit-dispatch.py`** — addresses the "Dispatch Protocol is instruction not enforcement" gap. Scores recent chains: of every chain that was announced, how many had complete per-step dispatch logged? Compliance score with verdict (healthy / partial / broken).
+- **`references/dispatch-protocol.md`** — full event schema + skip-pattern catalog. Detail moved out of SKILL.md.
+
+### Changed
+- **SKILL.md trimmed 298 → 218 lines** (-27%). Detail-heavy DISPATCH PROTOCOL, NAMED CHAIN LOOKUP, CATALOG CHECK, THINKING DEPTH sections are now ~10-line summaries that reference the deeper protocol docs in `references/`. Easier for the router itself to follow consistently.
+
+### Added (earlier in this release)
 - **README user-friendliness pass:**
   - Stronger one-line benefit at the top (vs feature-first opening)
   - Statusline preview in README so people see the visible value before installing

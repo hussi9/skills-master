@@ -121,68 +121,35 @@ Full chain syntax + standard shapes: see [`references/multi-domain-chaining.md`]
 
 ## NAMED CHAIN LOOKUP — Run Before Computing Fresh
 
-**After triage, BEFORE computing the chain from the routing tables**, check
-`SKILL.personal.md` for a `chains:` block. If the user has saved a named chain
-that matches the current task signature, use it.
+After triage, BEFORE computing fresh, check `SKILL.personal.md` for a
+`chains:` block. If any `when:` substring matches the user's prompt
+(case-insensitive, first match wins), use the saved chain instead.
 
+When a saved chain wins, announce it with provenance:
 ```
-Step 1 — Read SKILL.personal.md (already loaded as override layer)
-Step 2 — Look for a `chains:` block. Each entry has:
-           name:    short label
-           when:    keyword/phrase signals that should activate this chain
-           chain:   the dispatch sequence using → and + operators
-Step 3 — If any `when:` signal matches the current task → use that chain.
-Step 4 — Otherwise → compute fresh from the routing tables below.
+Using your saved chain `<name>`: <step1> → <step2> + <step3>
 ```
 
-**Always announce when a named chain wins.** The transparency rule does not
-change just because the chain came from storage:
-
-```
-Using your saved chain `ship-feature`:
-  writing-plans → dispatching-parallel-agents → frontend-design + db-expert
-```
-
-The chain in storage IS the chain that fires — no special syntax, no
-re-interpretation. If a saved chain is wrong, the user edits one file. No
-slash command, no tooling.
-
-Full design rationale + schema: see [`references/named-chains.md`](./references/named-chains.md).
+Schema, match algorithm, per-step model resolution: [`references/named-chains.md`](./references/named-chains.md).
 
 ---
 
-## CATALOG CHECK — Always Run After Triage (Key Differentiator)
+## CATALOG CHECK — Run After Routing-Table Lookup (Key Differentiator)
 
-**After routing to a skill from the tables above, check for a more specific match:**
+If the table returned a generic skill (e.g. `integration-specialist`),
+search local + remote catalogs for a more specific match. If found, use
+the specialist instead.
 
 ```
-keyword = core noun from the task (e.g., "kubernetes", "stripe", "threejs", "langchain")
-
-Step 1 — LOCAL CATALOG (fast, run first):
-  ls ~/.agent/skills/ | grep -iE '<keyword>'      ← 1,400+ Antigravity skills
-  ls ~/.claude/skills/ | grep -iE '<keyword>'     ← your installed custom skills
-  ls ~/.composio-skills/composio-skills/ | grep -iE '<keyword>'  ← 940+ integrations
-
-  If a more specific match exists → USE IT instead of the generic routing table entry.
-  Example: task is "add Stripe webhooks" → table says "integration-specialist"
-           but ls finds "stripe-automation" → use stripe-automation instead.
-
-Step 2 — ONLINE CATALOG (run if Step 1 has no match):
-  WebSearch: site:github.com "SKILL.md" claude <keyword>
-  → If a repo with SKILL.md exists:
-    git clone --depth 1 <url> ~/.claude/skills/<skill-name>/
-    Then invoke the newly installed skill.
-
-Step 3 — GENERATE (last resort):
-  superpowers:writing-skills → write a custom skill for this task
+1. Local: ls ~/.agent/skills/, ~/.claude/skills/, ~/.composio-skills/  | grep -iE '<keyword>'
+2. Remote: site:github.com "SKILL.md" claude <keyword>  (4 curated repos in ref doc)
+3. Generate: superpowers:writing-skills (last resort)
 ```
 
-**When to skip the catalog check:**
-- The routing table already gives you a highly specific skill (e.g., `systematic-debugging`)
-- Single-line fix or trivial command
-- The keyword is too generic to produce useful results (e.g., "code", "file", "text")
+Skip when: routing-table answer is already specialist · single-line fix ·
+keyword is too generic ("code", "file", "text").
 
-Curated repo list + full validation gates: see [`references/catalog-check.md`](./references/catalog-check.md) and [`references/known-skill-repos.md`](./references/known-skill-repos.md).
+Full validation gates + curated repos: [`references/catalog-check.md`](./references/catalog-check.md), [`references/known-skill-repos.md`](./references/known-skill-repos.md).
 
 ---
 
@@ -201,89 +168,42 @@ Edit `SKILL.personal.md` with your project signals. Your rules win over the core
 
 ## THINKING DEPTH — Pre-pend the Right Keyword
 
-Each routing row's **Thinking** column tells you how much extended-thinking budget
-to allocate when dispatching the step. Pre-pend the keyword to the dispatch prompt:
+Pre-pend the routing row's `Thinking` value as the literal first word of the
+dispatch prompt:
 
-| Value | Pre-pend | When |
-|-------|----------|------|
-| `none` | (nothing) | Trivial / mechanical work |
-| `think` | `think.` | Multi-file refactor, schema design, perf investigation |
-| `think-hard` | `think hard.` | Security review, AI/RAG design, ambiguous bug |
-| `ultrathink` | `ultrathink.` | Production incident, auth design, architecture decisions |
+| Value | Pre-pend |
+|-------|----------|
+| `none` | (nothing) |
+| `think` | `think.` |
+| `think-hard` | `think hard.` |
+| `ultrathink` | `ultrathink.` |
 
-The keyword must be the literal first word of the dispatch prompt — Claude
-parses it to allocate budget. Do not paraphrase ("really think" / "deeply
-analyze" — those don't work).
+Do not paraphrase. If a community `ultrathink` / `think-hard` skill is
+installed, invoke that skill INSTEAD of the bare keyword.
 
-If the step uses a community skill named `ultrathink` or `think-hard` (search
-the catalog — see [`references/known-skill-repos.md`](./references/known-skill-repos.md)),
-invoke that skill INSTEAD of the keyword. The skill provides structured
-guidance the keyword alone doesn't.
-
-Full rules + community-skill alternatives: [`references/thinking-depth.md`](./references/thinking-depth.md).
+Full rules + community alternatives: [`references/thinking-depth.md`](./references/thinking-depth.md).
 
 ---
 
-## DISPATCH PROTOCOL — How to Actually Run a Chain
+## DISPATCH PROTOCOL — How Each Step Actually Runs
 
-This is what makes the **Model** column enforced and not advisory.
-
-**Rule: every chain step that needs a model different from the parent session
-runs as a subagent via the `Agent` tool**, with `model` and `subagent_type`
-set explicitly from the routing triple.
+This is what makes the **Model** column enforced, not advisory.
 
 ```
 For each step in the announced chain:
-
-  IF step.model == parent_session_model AND step is not parallel-fan-out:
-      → invoke Skill(<skill>) in-session  (cheaper, same context)
-
+  IF step.model == parent_model AND not parallel-fan-out:
+      → Skill(<skill>) in-session   (cheaper, same context)
   ELSE:
-      → Agent(
-          subagent_type=<agent from triple>,
-          model=<model from triple>,
-          description="<step skill name>",
-          prompt="""
-            Use Skill: <skill from triple>
-            Task: <relevant slice of the user's request>
-            Context: <files / decisions the step needs>
-          """
-        )
-
-  Wait for the step to return before launching the next sequential step.
-  Parallel steps (operator `+`) launch together via a single message with
-  multiple Agent tool calls.
+      → Agent(subagent_type=<agent>, model=<model>,
+              prompt="<thinking-keyword>. Use Skill: <skill>. Task: <slice>. Context: <files>")
+  Sequential `→`: wait. Parallel `+`: one message, multiple Agent calls.
 ```
 
-**Why this matters:**
+After dispatching, write log lines to `~/.claude/skill_router_log.jsonl`
+(`chain-start`, `chain-step`, `thinking-active`, `chain-end`) for the
+statusline + the `scripts/audit-dispatch.py` compliance auditor.
 
-- The parent session can't hot-swap models mid-turn. The only way to enforce
-  a different model on a step is to run that step in a subagent with `model`
-  set on the `Agent` call.
-- Subagents cost tokens for context-passing, but you save dramatically when
-  a `haiku`-tier step would otherwise run on `opus`. For a 5-step chain with
-  mixed complexity, this typically nets a 30-50% cost reduction.
-- The parent session does light orchestration only. Heavy work happens at the
-  right model.
-
-**Logging the dispatch (for observability + statusline):**
-
-After announcing the chain, append one JSON line to
-`~/.claude/skill_router_log.jsonl` so the statusline can show progress:
-
-```bash
-echo '{"ts":"<ISO8601>","type":"chain-start","name":"<chain-name-or-computed>","steps":["step1","step2","step3"],"models":["sonnet","sonnet","opus"]}' \
-  >> ~/.claude/skill_router_log.jsonl
-```
-
-After each step completes, append:
-```bash
-echo '{"ts":"<ISO8601>","type":"chain-step","name":"<chain-name>","step":2,"of":3,"skill":"<skill>","model":"<model>"}' \
-  >> ~/.claude/skill_router_log.jsonl
-```
-
-The statusline reads this file to surface live chain progress — see
-[`statusline.sh`](./statusline.sh).
+Full event schema, common skip patterns, and verification: [`references/dispatch-protocol.md`](./references/dispatch-protocol.md).
 
 ---
 
