@@ -51,13 +51,13 @@ AMBIGUOUS? → Default to HIGHER-COMPLEXITY path
 | What | Skill | Agent | Model | Thinking |
 |------|-------|-------|-------|----------|
 | UI component / page | `frontend-design:frontend-design` | feature-dev:code-architect | sonnet | none |
-| API endpoint | `system-design` | feature-dev:code-architect | sonnet | think |
+| API endpoint | `feature-dev:feature-dev` | feature-dev:code-architect | sonnet | think |
 | Database schema | `db-expert` | db-expert | sonnet | think |
 | Auth / permissions | `brainstorming` → `security` | security-auditor | opus | **ultrathink** |
-| AI feature / agent | `langgraph` → `rag-engineer` | feature-dev:code-architect | sonnet | think-hard |
-| 3rd-party integration | composio skill for that app | integration-specialist | sonnet | none |
-| Mobile screen | `mobile-developer` → `frontend-design:frontend-design` | feature-dev:code-architect | sonnet | none |
-| CLI / automation script | `system-design` | general-purpose | sonnet | think |
+| AI feature / agent | `superpowers:brainstorming` | feature-dev:code-architect | sonnet | think-hard |
+| 3rd-party integration | `connect-apps` | integration-specialist | sonnet | none |
+| Mobile screen | `frontend-design:frontend-design` | feature-dev:code-architect | sonnet | none |
+| CLI / automation script | `superpowers:writing-plans` | general-purpose | sonnet | think |
 | Skill / Claude skill file | `superpowers:writing-skills` | general-purpose | sonnet | think |
 
 ---
@@ -78,7 +78,7 @@ AMBIGUOUS? → Default to HIGHER-COMPLEXITY path
 | 2+ independent tasks | `superpowers:dispatching-parallel-agents` | general-purpose | sonnet | none |
 | Resume previous work | `superpowers:executing-plans` | general-purpose | sonnet | none |
 | Research / docs lookup | context7 → `brainstorming` | general-purpose | sonnet | none |
-| Architecture / scope decision | `brainstorming` → `system-design` | general-purpose | opus | **ultrathink** |
+| Architecture / scope decision | `superpowers:brainstorming` → `superpowers:writing-plans` | general-purpose | opus | **ultrathink** |
 
 ---
 

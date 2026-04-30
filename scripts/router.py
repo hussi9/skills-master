@@ -166,23 +166,21 @@ class Step:
 DOMAIN_SKILL: dict[str, Step] = {
     "UI/Frontend":   Step("frontend-design:frontend-design", "feature-dev:code-architect", "sonnet", "none"),
     "DB schema":     Step("db-expert", "db-expert", "sonnet", "think"),
-    "API/Backend":   Step("system-design", "feature-dev:code-architect", "sonnet", "think"),
+    "API/Backend":   Step("feature-dev:feature-dev", "feature-dev:code-architect", "sonnet", "think"),
     "Edge function": Step("vercel:vercel-functions", "integration-specialist", "sonnet", "none"),
     "Auth":          Step("security", "security-auditor", "opus", "ultrathink"),
-    "Mobile":        Step("mobile-developer", "feature-dev:code-architect", "sonnet", "none"),
-    "Data/AI":       Step("rag-engineer", "feature-dev:code-architect", "sonnet", "think-hard"),
-    "3rd-party":     Step("integration-specialist", "integration-specialist", "sonnet", "none"),
-    "DevOps":        Step("system-design", "general-purpose", "sonnet", "think"),
+    "Mobile":        Step("frontend-design:frontend-design", "feature-dev:code-architect", "sonnet", "none"),
+    "Data/AI":       Step("superpowers:brainstorming", "feature-dev:code-architect", "sonnet", "think-hard"),
+    "3rd-party":     Step("connect-apps", "integration-specialist", "sonnet", "none"),
+    "DevOps":        Step("superpowers:writing-plans", "general-purpose", "sonnet", "think"),
 }
 
-# 3rd-party catalog upgrade — when prompt names a specific service, prefer it.
+# 3rd-party catalog upgrade — all named services route to connect-apps (the
+# only installed integration skill). Specialist per-service skills are not
+# installed; routing to them would produce ghost-skill deadlocks.
 CATALOG: dict[re.Pattern[str], str] = {
-    re.compile(r"\bstripe\b",   re.IGNORECASE): "stripe",
-    re.compile(r"\bslack\b",    re.IGNORECASE): "slack",
-    re.compile(r"\btwilio\b",   re.IGNORECASE): "twilio",
-    re.compile(r"\bplaid\b",    re.IGNORECASE): "plaid",
-    re.compile(r"\bsendgrid\b", re.IGNORECASE): "sendgrid",
-    re.compile(r"\bresend\b",   re.IGNORECASE): "resend",
+    re.compile(r"\bstripe\b|\bslack\b|\btwilio\b|\bplaid\b|\bsendgrid\b|\bresend\b",
+               re.IGNORECASE): "connect-apps",
 }
 
 # ---- Helpers ----------------------------------------------------------------
@@ -288,8 +286,7 @@ def build_broken_chain(text: str) -> list[Step]:
     if _TESTS_FAILING_RE.search(text):
         return [Step("test-runner", "test-runner", "sonnet", "none"),
                 Step("superpowers:systematic-debugging", "general-purpose", "sonnet", "think")]
-    if _TYPESCRIPT_RE.search(text):
-        return [Step("typescript-expert", "general-purpose", "sonnet", "none")]
+    # typescript-expert is not installed; fall through to systematic-debugging
     return [Step("superpowers:systematic-debugging", "general-purpose", "sonnet", "think")]
 
 
@@ -299,7 +296,7 @@ def build_build_chain(text: str, domains: list[str]) -> list[Step]:
     if _NEW_SKILL_RE.search(text):
         return [Step("superpowers:writing-skills", "general-purpose", "sonnet", "think")]
     if not domains:
-        return [Step("system-design", "feature-dev:code-architect", "sonnet", "think")]
+        return [Step("superpowers:writing-plans", "feature-dev:code-architect", "sonnet", "think")]
     if len(domains) == 1:
         s = DOMAIN_SKILL[domains[0]]
         if domains[0] == "3rd-party":
@@ -472,13 +469,10 @@ def clear_pending() -> None:
 
 # ---- Skill catalog (ghost-skill guard) -------------------------------------
 
-# Skills referenced by the routing tables that are model-side aliases
-# (commands, agents, marketplace shortcuts, plugin slash-commands) and
-# may not appear under the on-disk skill/plugin layouts. Whitelisted so
-# the ghost-skill guard doesn't suppress legitimate routes.
+# Skills that are valid Skill() targets but live outside the standard on-disk
+# layouts (e.g. vercel:deploy ships via the vercel plugin). Add entries here
+# ONLY after confirming Skill(skill="<name>") actually succeeds in practice.
 ROUTED_SKILL_ALIASES: frozenset[str] = frozenset({
-    "system-design", "rag-engineer", "mobile-developer", "typescript-expert",
-    "stripe", "slack", "twilio", "plaid", "sendgrid", "resend",
     "vercel:deploy",
 })
 
@@ -537,6 +531,7 @@ def _skill_catalog() -> Optional[set[str]]:
             pass
 
     # Plugin skills under ~/.claude/plugins/cache/*/<plugin>/*/skills/<skill>/SKILL.md
+    # and plugin commands under ~/.claude/plugins/cache/*/<plugin>/*/commands/<cmd>.md
     if PLUGINS_DIR.is_dir():
         try:
             for repo_dir in PLUGINS_DIR.iterdir():
@@ -549,16 +544,24 @@ def _skill_catalog() -> Optional[set[str]]:
                     for version_dir in plugin_dir.iterdir():
                         if not version_dir.is_dir():
                             continue
+                        # skills/<skill>/SKILL.md
                         skills_root = version_dir / "skills"
-                        if not skills_root.is_dir():
-                            continue
-                        for skill_dir in skills_root.iterdir():
-                            if not skill_dir.is_dir():
-                                continue
-                            if (skill_dir / "SKILL.md").is_file():
-                                catalog.add(f"{plugin_name}:{skill_dir.name}")
-                                catalog.add(skill_dir.name)
-                                found_any = True
+                        if skills_root.is_dir():
+                            for skill_dir in skills_root.iterdir():
+                                if not skill_dir.is_dir():
+                                    continue
+                                if (skill_dir / "SKILL.md").is_file():
+                                    catalog.add(f"{plugin_name}:{skill_dir.name}")
+                                    catalog.add(skill_dir.name)
+                                    found_any = True
+                        # commands/<cmd>.md — e.g. feature-dev plugin uses this layout
+                        cmds_root = version_dir / "commands"
+                        if cmds_root.is_dir():
+                            for cmd_file in cmds_root.iterdir():
+                                if cmd_file.is_file() and cmd_file.suffix == ".md":
+                                    catalog.add(f"{plugin_name}:{cmd_file.stem}")
+                                    catalog.add(cmd_file.stem)
+                                    found_any = True
         except OSError:
             pass
 
