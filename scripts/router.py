@@ -359,7 +359,8 @@ def iron_rule_block(chain: list[Step]) -> list[str]:
         f"[skill-router]   Skill(skill=\"{primary}\")",
         "[skill-router] Other state-changing tools (Bash, Edit, Write, Task) are blocked",
         "[skill-router] until this skill runs. Read/Glob/Grep/TodoWrite stay allowed.",
-        "[skill-router] Override: include [no-router] in your prompt next turn.",
+        "[skill-router] Override: the USER must type [no-router] in their next message.",
+        "[skill-router]   Writing [no-router] in your own response does NOT clear pending.",
     ]
 
 

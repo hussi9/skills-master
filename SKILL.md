@@ -97,8 +97,11 @@ includes an `IRON RULE` block naming the next required `Skill(skill="<X>")` call
 skill is invoked, and a `Stop` hook blocks turn end if it never was. Read/Glob/Grep/
 TodoWrite remain allowed so context-gathering still works.
 
-**Escape hatch:** include `[no-router]` in your prompt to disable enforcement for that
-turn. The router stays silent and writes no pending state, so all hooks pass through.
+**Escape hatch:** the **USER** must include `[no-router]` in their next message to disable
+enforcement for that turn. The router stays silent and clears pending state on UserPromptSubmit,
+so all hooks pass through. **Writing `[no-router]` in your own response text does NOT clear
+pending state** — only the user's prompt triggers the clear. If the Stop hook is blocking you
+on a ghost skill, it will self-clear on the next user message regardless (ghost-skill guard).
 
 **Calibration:** `tests/calibration.py` runs ~100 curated prompts through the router and
 reports precision/recall/F1 by triage path. Run with `--min-accuracy N` for a CI gate.
