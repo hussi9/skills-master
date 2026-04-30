@@ -4,7 +4,16 @@ All notable changes to skill-router. Newest first.
 
 ## Unreleased
 
+### Fixed
+- **Ghost-skill deadlock** — routing table entries that referenced non-existent skills (`system-design`, `typescript-expert`, `mobile-developer`, etc.) caused a permanent iron-rule deadlock: the hook blocked all edits until the skill ran, but `Skill()` failed because the skill doesn't exist. Fixed by replacing every ghost entry with the nearest installed skill, and adding belt-and-suspenders: the `PreToolUse` hook now auto-clears state if `remaining[0]` resolves to a ghost, so no deadlock survives even if one slips through.
+- **Parallel-chain `Stop` hook deadlock** — multi-domain BUILD chains wrote all steps (including parallel agent-dispatched ones) to `remaining`. Since agent-dispatched steps never call `Skill()` in the parent session, the `Stop` hook blocked turn end forever. Fixed: `remaining` now only tracks in-session Skill() calls; parallel fan-out steps are in `all` but not `remaining`.
+- **Framework compliance errors routed as BUILD** — prompts like "Suspense violations" or "static generation failed" were classified BUILD (new feature) instead of BROKEN (fix needed). Added `violations`, `failed`, and `suspense`/`static-render` patterns to `BROKEN_RE` so they route to `superpowers:systematic-debugging`.
+- **`feature-dev:feature-dev` flagged as ghost skill** — the `feature-dev` plugin uses a `commands/` layout instead of `skills/`, so the catalog scanner missed it. Extended `_skill_catalog()` to also scan `plugins/cache/.../commands/*.md`.
+
 ### Added
+- **Strict `[skill-router]` announcement format** — `SKILL.md` now mandates a verbatim template: every line is `[skill-router]`-prefixed, includes `Models:` / `Thinking:` summaries, and ends with per-step `▶` markers (`in-session`, `via Agent`, `parallel via Agent`). The format is greppable from the transcript; the audit script reads structured `chain-step` JSONL events (the `▶` lines are human-readable proof, not the script's source).
+- **Format docs propagated** to `references/multi-domain-chaining.md`, `references/named-chains.md`, `references/dispatch-protocol.md`, and `docs/how-it-works.md`. Single source of truth lives in `SKILL.md` → "ANNOUNCEMENT FORMAT".
+- **Line count update** — `SKILL.md` grew from 218 → 266 lines (+22%) to absorb the verbatim format templates. README, `docs/README.md`, and `docs/how-it-works.md` updated to `~265` to keep the claim honest.
 - **`scripts/learn-chains.py`** — addresses the "named-chain-as-corpus" gap. Reads `~/.claude/skill_router_log.jsonl`, finds chains the router has re-derived 3+ times, proposes named-chain entries you can paste (or `--apply`) into `SKILL.personal.md`. The first concrete step toward learned routing.
 - **`scripts/audit-dispatch.py`** — addresses the "Dispatch Protocol is instruction not enforcement" gap. Scores recent chains: of every chain that was announced, how many had complete per-step dispatch logged? Compliance score with verdict (healthy / partial / broken).
 - **`references/dispatch-protocol.md`** — full event schema + skip-pattern catalog. Detail moved out of SKILL.md.

@@ -4,7 +4,7 @@
 
 **Right Skill, right Agent, right Model, right Thinking depth — before any tool fires.**
 
-One SKILL.md (~220 lines). Auto-loaded by Claude Code. Zero UX. **90% routing accuracy** on 20 real prompts. Per-step model enforcement saves **30%+** on multi-domain chains.
+One SKILL.md (~265 lines). Auto-loaded by Claude Code. Zero UX. **80% composite routing accuracy / 90% path-only** on 20 real prompts (3-run average). Per-step model enforcement saves **30%+** on multi-domain chains. Every announcement line is `[skill-router]`-prefixed so `grep` can audit your transcript.
 
 ```
 $ # In Claude Code, with skill-router installed:
@@ -27,11 +27,17 @@ That announcement is testable — every step writes to `~/.claude/skill_router_l
 
 ```
 You type:    lets start teh implementation
-Router says: This touches 3 domains: UI/Frontend, DB, Edge function.
-             Chain: writing-plans → dispatching-parallel-agents → frontend-design + db-expert
+Router says: [skill-router] This touches 3 domains: UI/Frontend, DB, Edge function.
+             [skill-router] Chain: writing-plans → frontend-design + db-expert → vercel:deploy
+             [skill-router] Models: sonnet · sonnet+sonnet · sonnet  ·  Thinking: think
+             [skill-router] Dispatching step 1/3...
+
+             ▶ writing-plans  (sonnet, in-session)
+             ▶ frontend-design + db-expert  (sonnet, parallel via Agent)
+             ▶ vercel:deploy  (sonnet, in-session)
 ```
 
-The router announces what it's going to do *before* any code is touched. That announcement is testable — you can grep your transcript later and verify what fired matches what was announced.
+The router announces what it's going to do *before* any code is touched. The `[skill-router]` prefix is the testable contract — you can `grep '\[skill-router\]'` your transcript later and verify what fired matches what was announced.
 
 ## Why you'll want this
 
@@ -56,11 +62,18 @@ In a new Claude Code session, type something obviously multi-domain like:
 You should see Claude announce a chain *before* reading any files:
 
 ```
-This touches 2 domains: UI/Frontend, DB schema.
-Chain: writing-plans → <UI skill> + <DB skill>
+[skill-router] This touches 2 domains: UI/Frontend, DB schema.
+[skill-router] Chain: writing-plans → frontend-design + db-expert
+[skill-router] Models: sonnet · sonnet+sonnet  ·  Thinking: think
+[skill-router] Dispatching step 1/2...
+
+▶ writing-plans  (sonnet, in-session)
+▶ frontend-design + db-expert  (sonnet, parallel via Agent)
 ```
 
-If Claude jumps straight into reading files with no announcement, the skill didn't load — verify `~/.claude/skills/skill-router/SKILL.md` exists and starts with `name: skill-router`.
+The `[skill-router]` prefix on every announcement line is the testable contract — `grep '\[skill-router\]'` your transcript and verify what fired matches what was announced.
+
+If Claude jumps straight into reading files with no `[skill-router]` lines, the skill didn't load — verify `~/.claude/skills/skill-router/SKILL.md` exists and starts with `name: skill-router`.
 
 ## Optional — statusline shows live activity
 
@@ -81,12 +94,19 @@ Add the statusline + hook (5 minutes — see [docs/customizing.md](./docs/custom
 
 ## Measured
 
-20 real prompts through `claude -p` (test harness in [`run_routing_test.sh`](./run_routing_test.sh)):
+20 real prompts through `claude -p` (test harness in [`run_routing_test.sh`](./run_routing_test.sh)). 3-run average on Sonnet 4.6, 2026-04-29:
 
 | | Score |
 |---|---|
-| Path + Skill + Model correct | 18/20 (**90%**) |
-| Skill tool actually fires correctly | 7/8 (**88%**) |
+| Path routing only | 18/20 (**90%**) |
+| Path + Skill + Model all correct | 16/20 (**80%**) |
+| Model selection only | 19–20/20 (**95–100%**) |
+
+Stable misroutes (same 2–3 cases fail every run):
+- "Deploy" → picks `vercel:deploy` directly, skipping the `verification-before-completion` gate
+- Ambiguous "fix X AND add Y" → routes to OPERATE instead of defaulting to BUILD per the ambiguity rule
+
+These are systematic gaps in how Claude follows the routing table — not random variance. They're the next thing to fix in `SKILL.md`.
 
 ## Common questions
 

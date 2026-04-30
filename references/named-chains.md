@@ -100,12 +100,21 @@ thinking.
 
 ## Announcement
 
-When a saved chain wins:
+When a saved chain wins, output the saved-chain announcement format from
+`SKILL.md` → "ANNOUNCEMENT FORMAT". The `[skill-router]` prefix is mandatory.
+
 ```
-Using your saved chain `<name>`: <chain>
+[skill-router] Using your saved chain `<name>`: <s1> → <s2> + <s3>
+[skill-router] Models: <m1> · <m2>+<m3>  ·  Thinking: <max-thinking>
+[skill-router] Dispatching step 1/<N>...
+
+▶ <s1>  (<m1>, <in-session | via Agent>)
+▶ <s2> + <s3>  (<m2>, parallel via Agent)
 ```
 
-Same shape as a computed chain announcement, just with provenance.
+Same shape as a computed chain — just with `Using your saved chain \`<name>\``
+in place of the domain-count line, so the saved-vs-computed provenance is
+greppable.
 
 ## Logging hook (for future learned-chains)
 

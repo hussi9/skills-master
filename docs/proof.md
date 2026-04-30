@@ -5,6 +5,8 @@
 Two unedited screenshots from real Claude Code sessions, captured 2026-04-27.
 Same router, same install — different prompt shapes get different chain shapes.
 
+> **Format note:** these screenshots predate the strict `[skill-router]`-prefixed announcement format. The current format prefixes every line, adds a `Models:` and `Thinking:` summary, and writes per-step `▶` lines so the chain is greppable from the transcript. See `SKILL.md` → "ANNOUNCEMENT FORMAT" for the live spec. The chain *content* the router computes for these prompts is unchanged.
+
 ## Multi-domain BUILD → 4-skill chain
 
 ![chain](../assets/proof/chain-multi-domain.png)

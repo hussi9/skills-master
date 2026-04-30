@@ -21,4 +21,4 @@ These live in [`../references/`](../references/) and are loaded by `SKILL.md` wh
 
 ## Looking for the router itself?
 
-That's [`../SKILL.md`](../SKILL.md). It's ~200 lines and Claude Code auto-loads it. The docs in this folder explain *why* it's shaped that way.
+That's [`../SKILL.md`](../SKILL.md). It's ~265 lines and Claude Code auto-loads it. The docs in this folder explain *why* it's shaped that way.

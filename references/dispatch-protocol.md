@@ -11,6 +11,7 @@ For each step in the announced chain:
 
   IF step.model == parent_session_model AND step is not parallel-fan-out:
       → Skill(<skill>) in-session  (cheaper, same context)
+      → ▶ line says: in-session
 
   ELSE:
       → Agent(
@@ -24,11 +25,24 @@ For each step in the announced chain:
             Context: <files / decisions the step needs>
           """
         )
+      → ▶ line says: via Agent (or "parallel via Agent" inside a `+` step)
 
   Wait for sequential (`→`) steps to return before launching the next.
   Parallel (`+`) steps launch together via a single message with multiple
   Agent tool calls.
 ```
+
+The `▶` line in the announcement is not decoration — it is the dispatch-mode
+proof in the *transcript*. It is text-only: human-readable, greppable, and
+co-located with the `[skill-router]` announcement so a reader can verify the
+parent picked the right mode at a glance.
+
+The audit script (`scripts/audit-dispatch.py`) reads structured JSONL events
+from `~/.claude/skill_router_log.jsonl` (see schema below) — NOT the `▶`
+lines. The two layers must agree: if you write `▶ db-expert  (sonnet,
+in-session)` then call `Agent(...)`, the announcement is wrong (visible to
+humans); if you write a `chain-step` event with `via=table` then run nothing,
+the audit fails (visible to the script). Always write both for every step.
 
 ## Why subagents not in-session
 
@@ -74,13 +88,13 @@ reads it to verify the protocol was followed.
 
 Run `python3 scripts/audit-dispatch.py` from the repo. It scores recent
 chains: how many had full per-step dispatch logged vs how many were
-announced but ran inline. A low score is the signal that the protocol
+announced but ran in-session. A low score is the signal that the protocol
 instruction is being skipped and needs reinforcement.
 
 ## Common skip patterns
 
 | Pattern | Why router does it | Fix |
 |---|---|---|
-| All steps run inline despite announcement | Easier short-term, but loses model enforcement | Re-read this protocol; if step.model differs from parent, dispatch via Agent |
+| All steps run in-session despite announcement | Easier short-term, but loses model enforcement | Re-read this protocol; if step.model differs from parent, dispatch via Agent |
 | Parallel steps run sequentially | Model launched them one at a time | Send a single message with multiple Agent tool calls |
 | Step's thinking keyword forgotten | Just bad habit | The keyword is the literal first word of the dispatch prompt — see [`thinking-depth.md`](./thinking-depth.md) |
