@@ -15,6 +15,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from typing import Optional
 
 # Make scripts/ importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -290,6 +291,69 @@ class TestEdgeCases(unittest.TestCase):
         prompt = "I need to integrate Stripe payments into checkout"
         _, chain, _, _ = router.route(prompt)
         self.assertEqual(chain[0].skill, "stripe")
+
+
+class TestGhostSkillGuard(unittest.TestCase):
+    """Verify the router refuses to announce skills that aren't installed.
+
+    Each test patches `_skill_catalog` to a controlled value so we can
+    simulate uninstalled skills without touching the real ~/.claude tree.
+    Cache is cleared via `cache_clear()` between tests to keep them isolated.
+    """
+
+    def setUp(self) -> None:
+        # Snapshot the real cached loader so we can restore it after each test.
+        self._real_loader = router._skill_catalog
+        try:
+            self._real_loader.cache_clear()
+        except AttributeError:
+            pass
+
+    def tearDown(self) -> None:
+        router._skill_catalog = self._real_loader  # type: ignore[assignment]
+        try:
+            router._skill_catalog.cache_clear()
+        except AttributeError:
+            pass
+
+    def _patch_catalog(self, catalog: Optional[set[str]]) -> None:
+        # Replace the cached function with a stub returning our fixture.
+        router._skill_catalog = lambda: catalog  # type: ignore[assignment]
+
+    def test_ghost_skill_downgrades_to_skip(self) -> None:
+        # Catalog deliberately omits 'refactor' — pretend it's not installed.
+        self._patch_catalog({"system-design", "test-runner"})
+        path, chain, _, ann = router.route("refactor the auth module")
+        self.assertEqual(path, "SKIP",
+            "ghost skill must downgrade chain to SKIP, not announce")
+        self.assertEqual(chain, [])
+        self.assertEqual(ann, "")
+
+    def test_valid_skill_announces_normally(self) -> None:
+        # Catalog includes 'refactor' — should announce as usual.
+        self._patch_catalog({"refactor"})
+        path, chain, _, ann = router.route("refactor the auth module")
+        self.assertEqual(path, "OPERATE")
+        self.assertEqual(chain[0].skill, "refactor")
+        self.assertIn("▶ refactor", ann)
+
+    def test_fails_open_when_catalog_unloadable(self) -> None:
+        # None signals 'catalog could not be enumerated' — must NOT suppress.
+        self._patch_catalog(None)
+        path, chain, _, ann = router.route("refactor the auth module")
+        self.assertEqual(path, "OPERATE",
+            "fail-open: unloadable catalog must not silence valid routes")
+        self.assertEqual(chain[0].skill, "refactor")
+        self.assertIn("[skill-router]", ann)
+
+    def test_ghost_in_multi_step_chain_drops_whole_chain(self) -> None:
+        # Deploy chain is verification-before-completion → vercel:deploy.
+        # If the second step is a ghost, the whole chain is suppressed.
+        self._patch_catalog({"superpowers:verification-before-completion"})
+        path, chain, _, ann = router.route("deploy the current branch to production")
+        self.assertEqual(path, "SKIP")
+        self.assertEqual(chain, [])
+        self.assertEqual(ann, "")
 
 
 if __name__ == "__main__":

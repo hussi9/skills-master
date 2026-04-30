@@ -17,6 +17,7 @@ Exit codes:
   1  = parse error
 """
 from __future__ import annotations
+import functools
 import json
 import os
 import re
@@ -28,6 +29,12 @@ from typing import Optional
 
 LOG = Path.home() / ".claude" / "skill_router_log.jsonl"
 PENDING = Path.home() / ".claude" / "skill_router_pending.json"
+SKILLS_DIR = Path.home() / ".claude" / "skills"
+PLUGINS_DIR = Path.home() / ".claude" / "plugins" / "cache"
+# Commands and agents both surface as valid `Skill(skill="<name>")` targets
+# from the model's perspective, so the catalog scan must include them.
+COMMANDS_DIR = Path.home() / ".claude" / "commands"
+AGENTS_DIR = Path.home() / ".claude" / "agents"
 
 # Words that release the iron-rule enforcement when present in the prompt.
 # Documented escape hatch — the router stays silent and writes no pending
@@ -455,6 +462,119 @@ def clear_pending() -> None:
         PENDING.write_text("{}\n")
 
 
+# ---- Skill catalog (ghost-skill guard) -------------------------------------
+
+# Skills referenced by the routing tables that are model-side aliases
+# (commands, agents, marketplace shortcuts, plugin slash-commands) and
+# may not appear under the on-disk skill/plugin layouts. Whitelisted so
+# the ghost-skill guard doesn't suppress legitimate routes.
+ROUTED_SKILL_ALIASES: frozenset[str] = frozenset({
+    "system-design", "rag-engineer", "mobile-developer", "typescript-expert",
+    "stripe", "slack", "twilio", "plaid", "sendgrid", "resend",
+    "vercel:deploy",
+})
+
+
+@functools.lru_cache(maxsize=1)
+def _skill_catalog() -> Optional[set[str]]:
+    """Return the set of skill names that exist on disk, or None if the
+    catalog can't be loaded (so callers fail open).
+
+    Layouts scanned:
+      1. ~/.claude/skills/<name>/        → bare name (e.g., 'refactor')
+      2. ~/.claude/commands/<name>.md    → bare name (slash-command)
+      3. ~/.claude/agents/<name>.md      → bare name (subagent)
+      4. ~/.claude/plugins/cache/<repo>/<plugin>/<version>/skills/<skill>/SKILL.md
+         → namespaced as '<plugin>:<skill>' AND bare '<skill>'
+
+    All of these surface as valid `Skill(skill="<name>")` targets in the
+    Claude Code harness. Plus a static ROUTED_SKILL_ALIASES whitelist for
+    routing-table entries that resolve via marketplace / model-side aliases.
+
+    The result is cached for the lifetime of the process — the catalog
+    doesn't change between hook invocations within a single turn, and the
+    hook is short-lived enough that staleness doesn't matter.
+    """
+    catalog: set[str] = set(ROUTED_SKILL_ALIASES)
+    found_any = False
+
+    # Bare skills under ~/.claude/skills/
+    if SKILLS_DIR.is_dir():
+        try:
+            for entry in SKILLS_DIR.iterdir():
+                if entry.is_dir() and not entry.name.startswith("."):
+                    catalog.add(entry.name)
+                    found_any = True
+        except OSError:
+            pass
+
+    # Slash-commands under ~/.claude/commands/<name>.md
+    if COMMANDS_DIR.is_dir():
+        try:
+            for entry in COMMANDS_DIR.iterdir():
+                if entry.is_file() and entry.suffix == ".md":
+                    catalog.add(entry.stem)
+                    found_any = True
+        except OSError:
+            pass
+
+    # Subagents under ~/.claude/agents/<name>.md
+    if AGENTS_DIR.is_dir():
+        try:
+            for entry in AGENTS_DIR.iterdir():
+                if entry.is_file() and entry.suffix == ".md":
+                    catalog.add(entry.stem)
+                    found_any = True
+        except OSError:
+            pass
+
+    # Plugin skills under ~/.claude/plugins/cache/*/<plugin>/*/skills/<skill>/SKILL.md
+    if PLUGINS_DIR.is_dir():
+        try:
+            for repo_dir in PLUGINS_DIR.iterdir():
+                if not repo_dir.is_dir():
+                    continue
+                for plugin_dir in repo_dir.iterdir():
+                    if not plugin_dir.is_dir():
+                        continue
+                    plugin_name = plugin_dir.name
+                    for version_dir in plugin_dir.iterdir():
+                        if not version_dir.is_dir():
+                            continue
+                        skills_root = version_dir / "skills"
+                        if not skills_root.is_dir():
+                            continue
+                        for skill_dir in skills_root.iterdir():
+                            if not skill_dir.is_dir():
+                                continue
+                            if (skill_dir / "SKILL.md").is_file():
+                                catalog.add(f"{plugin_name}:{skill_dir.name}")
+                                catalog.add(skill_dir.name)
+                                found_any = True
+        except OSError:
+            pass
+
+    if not found_any:
+        return None
+    return catalog
+
+
+def valid_skill(name: str) -> bool:
+    """True if `name` is in the installed skill catalog.
+
+    Fail-open: if the catalog can't be enumerated (no skills dir, OS error),
+    return True so we don't suppress legitimate routes when verification is
+    impossible. The guard exists to catch typos and stale references — not
+    to second-guess a working install.
+    """
+    if not name:
+        return False
+    catalog = _skill_catalog()
+    if catalog is None:
+        return True
+    return name in catalog
+
+
 # ---- Logging ----------------------------------------------------------------
 
 def log_chain(path: str, chain: list[Step], domains: list[str]) -> None:
@@ -501,6 +621,14 @@ def route(prompt: str) -> tuple[str, list[Step], list[str], str]:
         chain = build_build_chain(prompt, domains)
     else:
         chain = build_operate_chain(prompt)
+    # Ghost-skill guard: if any step references an uninstalled skill, drop
+    # the whole chain rather than announce a name the model can't invoke.
+    # Better silent than misleading. Only kicks in when the catalog loads —
+    # `valid_skill` fails open if it can't be enumerated.
+    ghost = next((s.skill for s in chain if not valid_skill(s.skill)), None)
+    if ghost is not None:
+        print(f"[skill-router-warn] skipping ghost skill: {ghost}", file=sys.stderr)
+        return "SKIP", [], domains, ""
     return path, chain, domains, render(path, chain, domains)
 
 
